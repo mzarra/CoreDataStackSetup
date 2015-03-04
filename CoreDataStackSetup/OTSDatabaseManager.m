@@ -70,30 +70,34 @@
   });
 }
 
-- (void)saveDataWithCompletionHandler:(OTSDatabaseManagerSaveCompletionHandler)handler {
-  [[self mainThreadManagedObjectContext] performBlock:^{
-    if ([[self mainThreadManagedObjectContext] hasChanges]) {
-      NSError *error = nil;
-      if ([[self mainThreadManagedObjectContext] save:&error]) {
-        if ([[self saveManagedObjectContext] save:&error]) {
-          dispatch_async(dispatch_get_main_queue(), ^{
-            handler(YES, nil);
-          });
-        } else {
-          dispatch_async(dispatch_get_main_queue(), ^{
-            NSError *customError = nil; //Return a custom error
-            handler(NO, customError);
-          });
-        }
-      } else {
-        dispatch_async(dispatch_get_main_queue(), ^{
-          NSError *customError = nil; //Return a custom error
-          handler(NO, customError);
-        });
-      }
+- (void)saveDataWithCompletionHandler:(OTSDatabaseManagerSaveCompletionHandler)handler 
+{
+  if (![NSThread isMainThread]) { //Always start from the main thread
+    dispatch_sync(dispatch_get_main_queue(), ^{
+      [self saveDataWithCompletionHandler:handler];
+    });
+    return;
+  }
+  //Don't work if you don't need to (you can talk to these without performBlock)
+  if (![[self mainThreadManagedObjectContext] hasChanges] && ![[self saveManagedObjectContext] hasChanges]) {
+    if (handler) handler(YES, nil);
+    return;
+  }
+  NSError *error = nil;
+  if (![[self mainThreadManagedObjectContext] save:&error]) {
+    if (handler) handler (NO, error);
+    return; //fail early and often
+  }
+  [[self saveManagedObjectContext] performBlock:^{//private context must be on its on queue
+    NSError *saveError = nil;
+    if (![[self managedObjectContext] save:&saveError]) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (handler) handler(NO, saveError);
+      });
+      return;
     } else {
       dispatch_async(dispatch_get_main_queue(), ^{
-        handler(YES, nil);
+        if (handler) handler(YES, nil);
       });
     }
   }];

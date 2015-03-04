@@ -11,6 +11,7 @@
 @implementation OTSDatabaseManager
 
 - (void)setupCoreDataStackWithCompletionHandler:(OTSDatabaseManagerStackSetupCompletionHandler)handler {
+  if ([self saveManagedObjectContext]) return;
   NSURL *modelURL = [[NSBundle mainBundle] URLForResource:@"MyDataModel" withExtension:@"momd"];
   if (!modelURL) {
     NSError *customError = nil; //Return a custom error
